@@ -1,10 +1,12 @@
+import pandas as pd
+import math
 
 # Stock Class needs to hold its symbol and its price
 # Intially, current price will be a given value.
 # It can then be updated to fetch real-time price from an API (yahoo finance).
 
 class Stock:
-    def __init__(self, symbol, current_price):
+    def __init__(self, symbol: str, current_price: float):
         self.symbol = symbol
         self._price = current_price
     
@@ -24,12 +26,17 @@ class Stock:
 # I am adding a list of all tradable stocks to the Portfolio class so I can deal with stocks outside my initial holdings
 # (i.e. if I have a target allocation of 50% for a stock that I don't own, I need to buy it, therefore the "portfolio" needs to know about it)
 # It will also allow me to validate that a new stock added to the portfolio is valid
+# its basically giving the portfolio "access to the market"
 
 class Portfolio:
     def __init__(self, all_tradable_stocks: list[Stock], target_allocation: dict[str, float], initial_holdings: dict[str, float] = None):
         
-        if not sum(target_allocation.values()) == 1.0:
-            raise ValueError("Target allocation percentages must sum to 1.0")
+        # Bug: Decimal precision issue
+        # I will use math.isclose to compare the sum of the target allocation to 1.0
+        if not math.isclose(sum(target_allocation.values()), 1.0):
+            print(target_allocation.values())
+            print(sum(target_allocation.values()))
+            raise ValueError("Target allocation percentages must sum to 1.0.")
 
         self.target_allocation = target_allocation
         self.stock_objects = {stock.symbol: stock for stock in all_tradable_stocks}
@@ -67,6 +74,29 @@ class Portfolio:
             if percentage > 0:
                 print(f"  {symbol}: {shares:.4f} shares, Value: ${value:,.2f} ({percentage:.2f}%)")
 
+    
+    # I will create a similar method to get_current_allocation but with the return value being a df
+    # This will be helpful for displaying the portfolio state in the streamlit app
+    
+    def get_holdings_dataframe(self) -> pd.DataFrame:
+        total_value = self.get_total_value()
+        records = []
+        for symbol, shares in sorted(self.holdings.items()):
+            value = shares * self.stock_objects[symbol].current_price()
+            percentage = (value / total_value) * 100 if total_value > 0 else 0
+            records.append({
+                "Symbol": symbol,
+                "Shares": f"{shares:.4f}",
+                "Current Price": f"${self.stock_objects[symbol].current_price():,.2f}",
+                "Market Value": f"${value:,.2f}",
+                "Allocation (%)": f"{percentage:.2f}%"
+            })
+        if not records:
+            return pd.DataFrame(columns=["Symbol", "Shares", "Current Price", "Market Value", "Allocation (%)"])
+        
+        return pd.DataFrame(records)
+    
+
     # To rebalance the portfolio first calculate the total value of the portfolio
     # Then calculate the target value for each stock
     # Then calculate the current value for each stock
@@ -88,7 +118,7 @@ class Portfolio:
         if total_portfolio_value == 0:
             return actions
         
-        # bug found: If the target allocation does not have the same stocks as the
+        # bug found: If the target allocation dictionary does not have the same stocks as the
         # total market stock, the rebalance plan will not work as expected
         # because it wont be assigned a 0 in my target allocation
 
@@ -124,6 +154,8 @@ class Portfolio:
                 shares_to_sell = amount_to_sell / price
                 # Update the holdings
                 self.holdings[symbol] = max(0.0, self.holdings.get(symbol, 0.0) - shares_to_sell)
+                if self.holdings[symbol] == 0:
+                    del self.holdings[symbol]
 
         for order in plan.get("buy", []):
             symbol, amount_to_buy = order["symbol"], order["amount_in_dollars"]
@@ -169,10 +201,11 @@ if __name__ == "__main__":
     print("\n--- Target Allocation ---")
     for symbol, target_percent in my_target_allocation.items():
         print(f"  {symbol}: {target_percent * 100:.2f}%")
-    print("\n")
 
     # 7. Create the rebalance plan.
     rebalance_plan = portfolio.create_rebalance_plan()
+
+    print("\n--- Rebalance Plan ---")
 
     if rebalance_plan["buy"]:
         print("Orders to BUY:")
@@ -186,9 +219,10 @@ if __name__ == "__main__":
     if not rebalance_plan["buy"] and not rebalance_plan["sell"]:
         print("Portfolio is already balanced. No trades needed.")
     
-
     # 8. Execute the rebalance plan
+    print("\nExecuting Rebalance Plan...")
     portfolio.execute_rebalance(rebalance_plan)
     
     # 9. Check the current state of the portfolio
+    print("\n--- Final Portfolio State ---")
     portfolio.get_current_allocation()
