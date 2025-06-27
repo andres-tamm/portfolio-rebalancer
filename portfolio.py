@@ -64,7 +64,8 @@ class Portfolio:
         for symbol, shares in sorted(self.holdings.items()):
             value = shares * self.stock_objects[symbol].current_price()
             percentage = (value / total_value) * 100 if total_value > 0 else 0
-            print(f"  {symbol}: {shares:.4f} shares, Value: ${value:,.2f} ({percentage:.2f}%)")
+            if percentage > 0:
+                print(f"  {symbol}: {shares:.4f} shares, Value: ${value:,.2f} ({percentage:.2f}%)")
 
     # To rebalance the portfolio first calculate the total value of the portfolio
     # Then calculate the target value for each stock
@@ -185,3 +186,9 @@ if __name__ == "__main__":
     if not rebalance_plan["buy"] and not rebalance_plan["sell"]:
         print("Portfolio is already balanced. No trades needed.")
     
+
+    # 8. Execute the rebalance plan
+    portfolio.execute_rebalance(rebalance_plan)
+    
+    # 9. Check the current state of the portfolio
+    portfolio.get_current_allocation()
